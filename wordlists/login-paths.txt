@@ -1,0 +1,15 @@
+login
+signin
+sign-in
+auth
+authenticate
+admin
+admin/login
+user/login
+account/login
+session/new
+masuk
+akun/masuk
+wp-login.php
+administrator
+adminpanel

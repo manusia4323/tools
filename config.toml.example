@@ -1,0 +1,6 @@
+# Salin file ini menjadi config.toml di folder proyek.
+# Path ke gudang wordlist global. Contoh: /home/server/hack/wordlists
+wordlist_dir = "/home/server/hack/wordlists"
+
+# Hapus baris wordlist_dir atau kosongkan nilainya ("") untuk memakai
+# folder wordlists/ lokal di proyek.

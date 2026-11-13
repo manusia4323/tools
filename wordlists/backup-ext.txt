@@ -1,0 +1,15 @@
+bak
+backup
+old
+orig
+save
+swp
+tmp
+temp
+dist
+copy
+sql
+sql.gz
+tar.gz
+zip
+rar
