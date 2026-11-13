@@ -12,6 +12,7 @@ from core.reporter import Reporter
 from core.resources import find_wordlist, list_wordlists, load_wordlist
 from core.requester import PirateRequester, RequestError
 from core.session_manager import SessionManager
+from modules.crawler import Crawler
 from modules.login_finder import find_login_page
 from modules.tech_detect import detect_technologies
 
@@ -77,6 +78,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Cari wordlist berdasarkan nama file.",
     )
     wordlist_find.add_argument("-n", "--name", required=True, help="Nama yang dicari.")
+
+    crawl = commands.add_parser("crawl", help="Petakan link dan form satu website.")
+    crawl.add_argument("-u", "--url", required=True, help="URL awal crawl.")
+    crawl.add_argument("--depth", type=int, default=2, help="Kedalaman maksimum.")
+    crawl.add_argument("--max-pages", type=int, default=50, help="Batas halaman.")
+    crawl.add_argument("--delay", type=float, default=0.5, help="Jeda antar request.")
+    crawl.add_argument(
+        "--no-robots",
+        action="store_true",
+        help="Jangan periksa robots.txt.",
+    )
+    crawl.add_argument("--proxy", help="Proxy opsional, misalnya http://127.0.0.1:8080.")
     return parser
 
 
@@ -278,6 +291,86 @@ def run_wordlists(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_crawl(args: argparse.Namespace) -> int:
+    requester = PirateRequester(proxy=args.proxy)
+    try:
+        requester.load_cookies(args.url)
+    except RequestError as exc:
+        if not str(exc).startswith("Belum ada cookie tersimpan untuk "):
+            raise
+        PirateLogger.warn("Cookie belum tersimpan; crawl lanjut tanpa cookie.")
+
+    result = ScanResult(
+        target=args.url,
+        started_at=datetime.now(timezone.utc).isoformat(),
+    )
+    crawler = Crawler(
+        requester,
+        args.url,
+        max_depth=args.depth,
+        max_pages=args.max_pages,
+        delay=args.delay,
+        no_robots=args.no_robots,
+    )
+    PirateLogger.info(
+        f"Mulai crawl dari {args.url} "
+        f"(max {args.max_pages} halaman, depth {args.depth}, "
+        f"delay {args.delay}s)"
+    )
+    crawler.crawl()
+
+    links = crawler.get_links()
+    forms = crawler.get_forms()
+    PirateLogger.good(
+        f"Selesai. Dikunjungi: {len(crawler.get_visited())} halaman. "
+        f"Link: {len(links)}. Form: {len(forms)}."
+    )
+    for link in links:
+        result.add(
+            Finding(
+                type="link",
+                severity="info",
+                url=link,
+                evidence="Ditemukan saat crawl",
+            )
+        )
+    for form in forms:
+        result.add(
+            Finding(
+                type="form",
+                severity="info",
+                url=form["action"],
+                evidence=f"method={form['method']}",
+                detail={"inputs": form["inputs"]},
+            )
+        )
+
+    requester.save_cookies(args.url)
+    requester.save_session_meta(
+        {
+            "source": "crawl",
+            "pages_visited": len(crawler.get_visited()),
+            "links_found": len(links),
+            "forms_found": len(forms),
+        }
+    )
+
+    result.finished_at = datetime.now(timezone.utc).isoformat()
+    reporter = Reporter(result)
+    if args.output == "term":
+        reporter.to_terminal(skip_types={"link"})
+    else:
+        host = urlparse(args.url).netloc or "target"
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        extension = "json" if args.output == "json" else "md"
+        output_path = Path(args.out_dir) / f"{host}-{timestamp}.{extension}"
+        if args.output == "json":
+            reporter.to_json(str(output_path))
+        else:
+            reporter.to_markdown(str(output_path))
+    return 0
+
+
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
@@ -293,6 +386,11 @@ def main() -> int:
             return run_sessions(args)
         if args.command == "wordlists":
             return run_wordlists(args)
+        if args.command == "crawl":
+            parsed_url = urlparse(args.url)
+            if parsed_url.scheme not in ("http", "https") or not parsed_url.hostname:
+                parser.error("URL harus memakai http:// atau https:// dan memiliki host.")
+            return cmd_crawl(args)
     except RequestError as exc:
         PirateLogger.bad(str(exc))
         return 1

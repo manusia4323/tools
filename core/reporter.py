@@ -12,7 +12,7 @@ class Reporter:
     def __init__(self, result: ScanResult) -> None:
         self.result = result
 
-    def to_terminal(self) -> None:
+    def to_terminal(self, skip_types: set[str] | None = None) -> None:
         counts = Counter(finding.severity for finding in self.result.findings)
         if not self.result.findings:
             Log.info("Tidak ada temuan.")
@@ -24,6 +24,8 @@ class Reporter:
                 "high": Log.bad,
             }
             for finding in self.result.findings:
+                if skip_types is not None and finding.type in skip_types:
+                    continue
                 log = log_by_severity.get(finding.severity, Log.info)
                 log(
                     f"[{finding.severity}] {finding.type}  "
