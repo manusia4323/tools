@@ -1,5 +1,7 @@
 """Pengelolaan cookie sesi dan metadata lokal."""
 
+from __future__ import annotations
+
 import json
 import re
 from datetime import datetime, timezone
