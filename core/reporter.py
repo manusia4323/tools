@@ -15,7 +15,7 @@ class Reporter:
     def to_terminal(self, skip_types: set[str] | None = None) -> None:
         counts = Counter(finding.severity for finding in self.result.findings)
         if not self.result.findings:
-            Log.info("Tidak ada temuan.")
+            Log.info("No findings.")
         else:
             log_by_severity = {
                 "info": Log.info,
@@ -33,13 +33,13 @@ class Reporter:
                 )
 
         Log.info(
-            "Selesai. "
-            f"{len(self.result.findings)} temuan "
+            "Finished. "
+            f"{len(self.result.findings)} findings "
             f"({counts['high']} high, {counts['medium']} medium, "
             f"{counts['low']} low, {counts['info']} info)."
         )
 
-    def to_json(self, path: str) -> None:
+    def to_json(self, path: str) -> str:
         output_path = Path(path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with output_path.open("w", encoding="utf-8") as output_file:
@@ -49,16 +49,17 @@ class Reporter:
                 indent=2,
                 ensure_ascii=False,
             )
-        Log.good(f"Laporan JSON disimpan di {path}")
+        Log.good(f"JSON report saved to {path}")
+        return path
 
-    def to_markdown(self, path: str) -> None:
+    def to_markdown(self, path: str) -> str:
         lines = [
-            "# The Pirates — Laporan",
+            "# The Pirates — Report",
             "",
             f"**Target:** {self.result.target}",
-            f"**Mulai:** {self.result.started_at}",
-            f"**Selesai:** {self.result.finished_at}",
-            f"**Versi:** {self.result.tool_version}",
+            f"**Started:** {self.result.started_at}",
+            f"**Finished:** {self.result.finished_at}",
+            f"**Tool Version:** {self.result.tool_version}",
             "",
             "| Severity | Type | URL | Evidence |",
             "|---|---|---|---|",
@@ -79,4 +80,5 @@ class Reporter:
         output_path = Path(path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        Log.good(f"Laporan Markdown disimpan di {path}")
+        Log.good(f"Markdown report saved to {path}")
+        return path

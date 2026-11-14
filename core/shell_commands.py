@@ -4,6 +4,7 @@ import cmd
 import shlex
 
 from core.logger import PirateLogger
+from core.scope_manager import ScopeManager
 
 
 # Opsi global yang di main.py harus berada SEBELUM subcommand.
@@ -67,6 +68,7 @@ class PirateShell(cmd.Cmd):
     def __init__(self) -> None:
         super().__init__()
         self.target: str = ""
+        self.scope = ScopeManager()
 
     def do_target(self, arg: str) -> None:
         """Atur atau lihat target URL.
@@ -97,6 +99,41 @@ class PirateShell(cmd.Cmd):
         else:
             PirateLogger.warn(f"Subcommand target tidak dikenal: {sub}")
 
+    def do_scope(self, arg: str) -> None:
+        """Kelola scope whitelist.
+
+        Penggunaan: scope add <URL> | list | clear
+        """
+        parts = arg.split(None, 1)
+        if not parts:
+            PirateLogger.warn("Gunakan: scope add <URL> | list | clear")
+            return
+
+        sub = parts[0].lower()
+
+        if sub == "add":
+            if len(parts) < 2:
+                PirateLogger.warn("Gunakan: scope add <URL>")
+                return
+            url = parts[1].strip()
+            if self.scope.add(url):
+                PirateLogger.good(f"Added to scope: {url}")
+            else:
+                PirateLogger.info(f"Already in scope: {url}")
+        elif sub == "list":
+            urls = self.scope.list()
+            if not urls:
+                PirateLogger.info("Scope is empty.")
+            else:
+                PirateLogger.info("Allowed URLs:")
+                for url in urls:
+                    print(f"  - {url}")
+        elif sub == "clear":
+            self.scope.clear()
+            PirateLogger.good("Scope cleared.")
+        else:
+            PirateLogger.warn(f"Subcommand scope tidak dikenal: {sub}")
+
     def do_recon(self, arg: str) -> None:
         """Jalankan recon terhadap target.
 
@@ -104,6 +141,9 @@ class PirateShell(cmd.Cmd):
         """
         if not self.target:
             PirateLogger.warn("Target belum diatur. Gunakan 'target set <URL>'.")
+            return
+        if not self.scope.is_allowed(self.target):
+            PirateLogger.bad(f"Target not in scope. Add it with: scope add {self.target}")
             return
         from main import run_recon
 
@@ -121,12 +161,33 @@ class PirateShell(cmd.Cmd):
         if not self.target:
             PirateLogger.warn("Target belum diatur. Gunakan 'target set <URL>'.")
             return
+        if not self.scope.is_allowed(self.target):
+            PirateLogger.bad(f"Target not in scope. Add it with: scope add {self.target}")
+            return
         from main import cmd_crawl
 
         args = _parse_args("crawl", f"-u {self.target} {arg}")
         if args is None:
             return
         cmd_crawl(args)
+
+    def do_whatweb(self, arg: str) -> None:
+        """Jalankan WhatWeb terhadap target.
+
+        Penggunaan: whatweb
+        """
+        if not self.target:
+            PirateLogger.warn("Target belum diatur. Gunakan 'target set <URL>'.")
+            return
+        if not self.scope.is_allowed(self.target):
+            PirateLogger.bad(f"Target not in scope. Add it with: scope add {self.target}")
+            return
+        from main import cmd_whatweb
+
+        args = _parse_args("whatweb", f"-u {self.target} {arg}")
+        if args is None:
+            return
+        cmd_whatweb(args)
 
     def do_sessions(self, arg: str) -> None:
         """Kelola sesi cookie tersimpan.

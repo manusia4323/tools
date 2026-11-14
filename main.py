@@ -15,6 +15,7 @@ from core.session_manager import SessionManager
 from modules.crawler import Crawler
 from modules.login_finder import find_login_page
 from modules.tech_detect import detect_technologies
+from modules.whatweb_wrapper import check_whatweb, run_whatweb
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -90,6 +91,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Jangan periksa robots.txt.",
     )
     crawl.add_argument("--proxy", help="Proxy opsional, misalnya http://127.0.0.1:8080.")
+
+    whatweb = commands.add_parser("whatweb", help="Jalankan WhatWeb fingerprinting.")
+    whatweb.add_argument("-u", "--url", required=True, help="URL target untuk whatweb.")
+
     return parser
 
 
@@ -144,7 +149,7 @@ def run_recon(args: argparse.Namespace) -> int:
 
     if not args.no_save:
         saved_path = requester.save_cookies(response.url)
-        PirateLogger.good(f"Cookie disimpan di {saved_path}")
+        PirateLogger.good(f"Cookie disimpan ke {saved_path}")
         requester.save_session_meta(
             {
                 "source": "recon",
@@ -157,6 +162,7 @@ def run_recon(args: argparse.Namespace) -> int:
 
     result.finished_at = datetime.now(timezone.utc).isoformat()
     reporter = Reporter(result)
+    PirateLogger.separator()
     if args.output == "term":
         reporter.to_terminal()
     else:
@@ -175,7 +181,7 @@ def run_cookies(host: str) -> int:
     requester = PirateRequester()
     cookies = requester.load_cookies(host)
     if not cookies:
-        PirateLogger.warn(f"Belum ada cookie tersimpan untuk {host}.")
+        PirateLogger.warn(f"Tidak ada cookie tersimpan untuk {host}.")
         return 0
     PirateLogger.info(f"Cookie tersimpan untuk {host}:")
     for cookie in cookies:
@@ -188,7 +194,7 @@ def run_sessions(args: argparse.Namespace) -> int:
     if args.sessions_command == "list":
         sessions = manager.list()
         if not sessions:
-            PirateLogger.warn("Belum ada sesi tersimpan.")
+            PirateLogger.warn("Tidak ada sesi tersimpan.")
             return 0
         for session in sessions:
             PirateLogger.info(
@@ -208,6 +214,7 @@ def run_sessions(args: argparse.Namespace) -> int:
         PirateLogger.info(f"Jumlah cookie: {session['cookie_count']}")
         PirateLogger.info(f"Dibuat: {session['created_at']}")
         PirateLogger.info(f"Diperbarui: {session['updated_at']}")
+
         excluded = {
             "host",
             "cookie_count",
@@ -223,7 +230,7 @@ def run_sessions(args: argparse.Namespace) -> int:
         else:
             PirateLogger.info("  Tidak ada metadata.")
 
-        PirateLogger.info("Cookie (tersamarkan):")
+        PirateLogger.info("Cookie (disamarkan):")
         masked_cookies = manager.mask_cookies(host)
         if masked_cookies:
             for name, value in masked_cookies.items():
@@ -235,7 +242,7 @@ def run_sessions(args: argparse.Namespace) -> int:
     confirmation = input(f"Hapus sesi untuk {host}? [y/N] ")
     if confirmation.strip().lower() == "y":
         if manager.delete(host):
-            PirateLogger.good(f"Sesi untuk {host} berhasil dihapus.")
+            PirateLogger.good(f"Sesi untuk {host} dihapus.")
         else:
             PirateLogger.info(f"Sesi untuk {host} tidak ditemukan.")
     else:
@@ -247,7 +254,7 @@ def run_wordlists(args: argparse.Namespace) -> int:
     if args.wordlists_command == "list":
         wordlists = list_wordlists()
         if not wordlists:
-            PirateLogger.warn("Belum ada wordlist.")
+            PirateLogger.warn("Tidak ada wordlist ditemukan.")
             return 0
 
         was_debug_enabled = PirateLogger.debug_enabled
@@ -298,8 +305,13 @@ def cmd_crawl(args: argparse.Namespace) -> int:
     except RequestError as exc:
         if not str(exc).startswith("Belum ada cookie tersimpan untuk "):
             raise
-        PirateLogger.warn("Cookie belum tersimpan; crawl lanjut tanpa cookie.")
+        PirateLogger.warn("Cookie belum tersimpan; crawl dilanjutkan tanpa cookie.")
 
+    PirateLogger.info(
+        f"Memulai crawl dari {args.url} "
+        f"(maks {args.max_pages} halaman, kedalaman {args.depth}, "
+        f"jeda {args.delay}s)"
+    )
     result = ScanResult(
         target=args.url,
         started_at=datetime.now(timezone.utc).isoformat(),
@@ -311,11 +323,6 @@ def cmd_crawl(args: argparse.Namespace) -> int:
         max_pages=args.max_pages,
         delay=args.delay,
         no_robots=args.no_robots,
-    )
-    PirateLogger.info(
-        f"Mulai crawl dari {args.url} "
-        f"(max {args.max_pages} halaman, depth {args.depth}, "
-        f"delay {args.delay}s)"
     )
     crawler.crawl()
 
@@ -357,6 +364,7 @@ def cmd_crawl(args: argparse.Namespace) -> int:
 
     result.finished_at = datetime.now(timezone.utc).isoformat()
     reporter = Reporter(result)
+    PirateLogger.separator()
     if args.output == "term":
         reporter.to_terminal(skip_types={"link"})
     else:
@@ -369,6 +377,19 @@ def cmd_crawl(args: argparse.Namespace) -> int:
         else:
             reporter.to_markdown(str(output_path))
     return 0
+
+
+def cmd_whatweb(args: argparse.Namespace) -> int:
+    if not check_whatweb():
+        PirateLogger.bad("WhatWeb is not installed on this system. Please install it to use this feature.")
+        return 1
+
+    parsed_url = urlparse(args.url)
+    host = parsed_url.hostname or args.url
+
+    PirateLogger.banner("The Pirates - WhatWeb Scanner")
+    success = run_whatweb(host)
+    return 0 if success else 1
 
 
 def main() -> int:
@@ -391,6 +412,11 @@ def main() -> int:
             if parsed_url.scheme not in ("http", "https") or not parsed_url.hostname:
                 parser.error("URL harus memakai http:// atau https:// dan memiliki host.")
             return cmd_crawl(args)
+        if args.command == "whatweb":
+            parsed_url = urlparse(args.url)
+            if parsed_url.scheme not in ("http", "https") or not parsed_url.hostname:
+                parser.error("URL harus memakai http:// atau https:// dan memiliki host.")
+            return cmd_whatweb(args)
     except RequestError as exc:
         PirateLogger.bad(str(exc))
         return 1
@@ -399,4 +425,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

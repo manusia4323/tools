@@ -34,3 +34,16 @@ class PirateLogger:
     def debug(cls, message: str) -> None:
         if cls.debug_enabled:
             cls._write("~", Fore.MAGENTA, message)
+
+    @classmethod
+    def banner(cls, text: str) -> None:
+        """Print text with top and bottom border lines."""
+        border = "=" * 50
+        cls._write("*", Fore.CYAN, border)
+        cls._write("*", Fore.CYAN, f"  {text}")
+        cls._write("*", Fore.CYAN, border)
+
+    @classmethod
+    def separator(cls) -> None:
+        """Print a thin separator line."""
+        cls._write("", Fore.CYAN, "-" * 50)
