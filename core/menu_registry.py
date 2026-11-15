@@ -4,11 +4,14 @@ MENU_STRUCTURE = {
     "Web Analysis": [
         {"name": "Recon", "desc": "Analyze single page", "handler": "do_recon"},
         {"name": "Crawl", "desc": "Map links and forms", "handler": "do_crawl"},
-        {"name": "Web Profiler", "desc": "WAF, Headers, Cookies", "handler": "do_profile"}
+        {"name": "Web Profiler", "desc": "WAF, Headers, Cookies", "handler": "do_profile"},
     ],
     "Network Tools": [
         {"name": "Nmap", "desc": "Port scanner", "handler": "do_nmap"},
-        {"name": "WhatWeb", "desc": "Fingerprinting", "handler": "do_whatweb"}
+        {"name": "RustScan", "desc": "Fast port scanner", "handler": "do_rustscan"},
+        {"name": "Arp-Scan", "desc": "Local network discovery", "handler": "do_arpscan"},
+        {"name": "Netdiscover", "desc": "Active/passive ARP recon", "handler": "do_netdiscover"},
+        {"name": "WhatWeb", "desc": "Fingerprinting tech", "handler": "do_whatweb"},
     ],
     "Utilities": [
         {"name": "Target", "desc": "Set global target", "handler": "do_target"},
@@ -16,6 +19,6 @@ MENU_STRUCTURE = {
         {"name": "Reports", "desc": "View reports", "handler": "do_reports"},
         {"name": "Sessions", "desc": "Manage cookie sessions", "handler": "do_sessions"},
         {"name": "Wordlists", "desc": "Manage wordlists", "handler": "do_wordlists"},
-        {"name": "Cookies", "desc": "View stored cookies", "handler": "do_cookies"}
-    ]
+        {"name": "Cookies", "desc": "View stored cookies", "handler": "do_cookies"},
+    ],
 }

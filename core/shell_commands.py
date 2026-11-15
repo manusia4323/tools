@@ -397,12 +397,62 @@ class PirateShell(cmd.Cmd):
 
         from main import cmd_crawl
 
-        args = _parse_args("crawl", f"-u {self.target} {arg}")
-        if args is None:
-            return
-        cmd_crawl(args)
-        if hasattr(args, 'report_path') and args.report_path:
-            PirateLogger.info(f"📁 Report saved to: {args.report_path}")
+        if not arg.strip():
+            try:
+                max_pages_input = questionary.text("Max pages (default 50):", default="50").ask()
+                if max_pages_input is None:
+                    return
+                max_pages = max_pages_input.strip() or "50"
+
+                depth_input = questionary.text("Depth (default 2):", default="2").ask()
+                if depth_input is None:
+                    return
+                depth = depth_input.strip() or "2"
+
+                delay_input = questionary.text("Delay in seconds (default 0.5):", default="0.5").ask()
+                if delay_input is None:
+                    return
+                delay = delay_input.strip() or "0.5"
+
+                ignore_robots = questionary.confirm("Ignore robots.txt?").ask()
+                if ignore_robots is None:
+                    return
+
+                save_report = questionary.confirm("Save report to file?").ask()
+                if save_report is None:
+                    return
+
+                output_format = None
+                if save_report:
+                    output_format = questionary.select("Format:", choices=["json", "md"]).ask()
+                    if output_format is None:
+                        return
+
+                crawl_args = f"-u {self.target} --max-pages {max_pages} --depth {depth} --delay {delay}"
+                if ignore_robots:
+                    crawl_args += " --no-robots"
+                if output_format:
+                    crawl_args += f" --output {output_format}"
+
+                args = _parse_args("crawl", crawl_args)
+                if args is None:
+                    return
+                cmd_crawl(args)
+                if hasattr(args, "report_path") and args.report_path:
+                    PirateLogger.info(f"📁 Report saved to: {args.report_path}")
+            except (KeyboardInterrupt, Exception) as e:
+                if not isinstance(e, KeyboardInterrupt):
+                    PirateLogger.bad(f"Terjadi kesalahan saat crawl: {e}")
+                else:
+                    print()
+                return
+        else:
+            args = _parse_args("crawl", f"-u {self.target} {arg}")
+            if args is None:
+                return
+            cmd_crawl(args)
+            if hasattr(args, 'report_path') and args.report_path:
+                PirateLogger.info(f"📁 Report saved to: {args.report_path}")
 
     def do_profile(self, arg: str) -> None:
         """Run security profiling against target.
@@ -531,6 +581,146 @@ class PirateShell(cmd.Cmd):
                 target_host = parsed.hostname or target_host
             run_nmap(target_host, args.profile, args.extra_args)
 
+    def do_rustscan(self, arg: str) -> None:
+        """Run RustScan fast port scan.
+
+        Usage: rustscan [target] [profile_num] [extra_args...]
+        """
+        from modules.rustscan_wrapper import RUSTSCAN_PROFILES, print_rustscan_profiles, run_rustscan
+
+        parts = shlex.split(arg) if arg.strip() else []
+
+        if not parts:
+            try:
+                # 1. Check target
+                target_mode = questionary.select(
+                    "Target Selection for RustScan:",
+                    choices=["Use current target (auto-parsed)", "Custom hostname/IP", "Cancel"]
+                ).ask()
+                if not target_mode or target_mode == "Cancel":
+                    return
+
+                target_host = ""
+                if "current target" in target_mode:
+                    if not self.target:
+                        PirateLogger.warn("No current target set. Please enter custom hostname/IP.")
+                        target_host = questionary.text("Enter target hostname or IP:").ask()
+                    else:
+                        parsed = urlparse(self.target)
+                        target_host = parsed.hostname or self.target
+                        PirateLogger.info(f"Using parsed target host: {target_host}")
+                else:
+                    raw_input_target = questionary.text("Enter target (URL or IP/hostname):").ask()
+                    if not raw_input_target:
+                        return
+                    if "://" in raw_input_target:
+                        parsed = urlparse(raw_input_target)
+                        target_host = parsed.hostname or raw_input_target
+                    else:
+                        target_host = raw_input_target.strip()
+
+                if not target_host:
+                    return
+
+                # 2. Show profiles table
+                print_rustscan_profiles()
+
+                # 3. Ask profile number via questionary
+                profile_choices = [
+                    f"{pid}: {p.get('name', '')} — {p.get('description', '')}"
+                    for pid, p in RUSTSCAN_PROFILES.items()
+                ]
+                profile_choices.append("Cancel")
+
+                selected_prof = questionary.select(
+                    "Select RustScan Profile:",
+                    choices=profile_choices
+                ).ask()
+
+                if not selected_prof or selected_prof == "Cancel":
+                    return
+
+                profile_num = selected_prof.split(":")[0].strip()
+
+                # 4. Run rustscan
+                run_rustscan(target_host, profile_num)
+            except (KeyboardInterrupt, Exception) as e:
+                if not isinstance(e, KeyboardInterrupt):
+                    PirateLogger.bad(f"Error in RustScan: {e}")
+                else:
+                    print()
+                return
+        else:
+            # Called with arguments: rustscan <target> [profile_num] [extra_args...]
+            target_host = parts[0]
+            if "://" in target_host:
+                parsed = urlparse(target_host)
+                target_host = parsed.hostname or target_host
+
+            profile_num = parts[1] if len(parts) > 1 else "1"
+            extra_args = parts[2:] if len(parts) > 2 else None
+            run_rustscan(target_host, profile_num, extra_args)
+
+    def do_arpscan(self, arg: str) -> None:
+        """Run Arp-Scan on local network.
+
+        Usage: arpscan [interface]
+        """
+        from modules.arpscan_wrapper import run_arpscan
+
+        interface = arg.strip()
+        if not interface:
+            try:
+                interface_input = questionary.text(
+                    "Enter network interface (leave empty for default, e.g. eth0, wlan0):"
+                ).ask()
+                if interface_input is None:
+                    return
+                interface = interface_input.strip()
+            except (KeyboardInterrupt, Exception) as e:
+                if not isinstance(e, KeyboardInterrupt):
+                    PirateLogger.bad(f"Error in Arp-Scan: {e}")
+                else:
+                    print()
+                return
+
+        run_arpscan(interface)
+
+    def do_netdiscover(self, arg: str) -> None:
+        """Run Netdiscover active/passive ARP recon.
+
+        Usage: netdiscover [interface] [subnet]
+        """
+        from modules.netdiscover_wrapper import run_netdiscover
+
+        parts = shlex.split(arg) if arg.strip() else []
+        if not parts:
+            try:
+                interface_input = questionary.text(
+                    "Enter network interface (leave empty for default, e.g. eth0, wlan0):"
+                ).ask()
+                if interface_input is None:
+                    return
+                interface = interface_input.strip()
+
+                subnet_input = questionary.text(
+                    "Enter target subnet (leave empty for auto, e.g. 192.168.1.0/24):"
+                ).ask()
+                if subnet_input is None:
+                    return
+                subnet = subnet_input.strip()
+            except (KeyboardInterrupt, Exception) as e:
+                if not isinstance(e, KeyboardInterrupt):
+                    PirateLogger.bad(f"Error in Netdiscover: {e}")
+                else:
+                    print()
+                return
+        else:
+            interface = parts[0].strip()
+            subnet = parts[1].strip() if len(parts) > 1 else ""
+
+        run_netdiscover(interface, subnet)
+
     def do_whatweb(self, arg: str) -> None:
         """Jalankan WhatWeb terhadap target.
 
@@ -622,39 +812,38 @@ class PirateShell(cmd.Cmd):
         parts = arg.split(None, 1)
         if not parts:
             if not arg.strip():
-                try:
-                    action = questionary.select(
-                        "Reports Management:",
-                        choices=["List Reports", "Show Report", "Cancel"]
-                    ).ask()
-                    if action == "List Reports":
+                while True:
+                    try:
                         if not reports_dir.exists():
                             PirateLogger.info("No reports directory found.")
                             return
+
                         reports = []
                         for ext in ("*.json", "*.md"):
                             reports.extend(reports_dir.glob(ext))
-                        if not reports:
-                            PirateLogger.info("No reports found.")
-                        else:
-                            PirateLogger.info("Available reports:")
-                            for r in sorted(reports):
-                                print(f"  - {r.name}")
-                    elif action == "Show Report":
-                        if not reports_dir.exists():
-                            PirateLogger.info("No reports directory found.")
-                            return
-                        reports = []
-                        for ext in ("*.json", "*.md"):
-                            reports.extend(reports_dir.glob(ext))
+
                         if not reports:
                             PirateLogger.info("No reports found.")
                             return
+
                         rep_choices = [r.name for r in sorted(reports)]
-                        chosen_rep = questionary.select("Select report to view:", choices=rep_choices).ask()
-                        if chosen_rep:
-                            report_path = reports_dir / chosen_rep
-                            if report_path.suffix == ".json":
+                        choices = [*rep_choices, "Back to Menu"]
+
+                        chosen_rep = questionary.select(
+                            "Select report to view:",
+                            choices=choices
+                        ).ask()
+
+                        if chosen_rep is None or chosen_rep == "Back to Menu":
+                            break
+
+                        report_path = reports_dir / chosen_rep
+                        if not report_path.exists():
+                            PirateLogger.bad(f"Report not found: {chosen_rep}")
+                            continue
+
+                        if report_path.suffix == ".json":
+                            try:
                                 data = json.loads(report_path.read_text(encoding="utf-8"))
                                 PirateLogger.info("Report Summary:")
                                 print(f"  Target: {data.get('target', 'N/A')}")
@@ -664,10 +853,26 @@ class PirateShell(cmd.Cmd):
                                 forms = sum(1 for f in findings if f.get('type') == 'form')
                                 print(f"  Links: {links}")
                                 print(f"  Forms: {forms}")
-                            else:
-                                PirateLogger.info(f"Report path: {report_path}")
-                except (KeyboardInterrupt, Exception):
-                    print()
+                            except Exception as e:
+                                PirateLogger.bad(f"Error reading JSON report: {e}")
+                        elif report_path.suffix == ".md":
+                            try:
+                                content = report_path.read_text(encoding="utf-8")
+                                lines = content.splitlines()[:20]
+                                PirateLogger.info(f"Report: {chosen_rep} (First 20 lines):")
+                                for line in lines:
+                                    print(line)
+                            except Exception as e:
+                                PirateLogger.bad(f"Error reading markdown report: {e}")
+                        else:
+                            PirateLogger.info(f"Report path: {report_path}")
+
+                    except KeyboardInterrupt:
+                        print()
+                        break
+                    except Exception as e:
+                        PirateLogger.bad(f"Terjadi kesalahan saat melihat laporan: {e}")
+                        break
                 return
 
             PirateLogger.warn("Usage: reports list | show")
@@ -708,8 +913,13 @@ class PirateShell(cmd.Cmd):
                     forms = sum(1 for f in findings if f.get('type') == 'form')
                     print(f"  Links: {links}")
                     print(f"  Forms: {forms}")
+                elif report_path.suffix == ".md":
+                    lines = report_path.read_text(encoding="utf-8").splitlines()[:20]
+                    PirateLogger.info(f"Report: {filename} (First 20 lines):")
+                    for line in lines:
+                        print(line)
                 else:
-                    PirateLogger.info("Use 'cat' to view markdown reports.")
+                    PirateLogger.info("Use 'cat' to view report.")
             except Exception as e:
                 PirateLogger.bad(f"Error reading report: {e}")
         else:

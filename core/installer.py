@@ -1,8 +1,41 @@
-"""Self-installer for missing external tools (nmap, whatweb)."""
+"""Self-installer for missing external tools (nmap, whatweb, rustscan, arp-scan, netdiscover)."""
 
 import shutil
 import subprocess
 from core.logger import PirateLogger as Log
+
+OS_MAP = {
+    "Ubuntu/Debian (apt)": {
+        "cmd": "sudo apt update && sudo apt install -y",
+        "tools": {
+            "nmap": "nmap",
+            "whatweb": "whatweb",
+            "rustscan": "rustscan",
+            "arp-scan": "arp-scan",
+            "netdiscover": "netdiscover",
+        },
+    },
+    "Arch Linux (pacman)": {
+        "cmd": "sudo pacman -S --noconfirm",
+        "tools": {
+            "nmap": "nmap",
+            "whatweb": "whatweb",
+            "rustscan": "rustscan",
+            "arp-scan": "arp-scan",
+            "netdiscover": "netdiscover",
+        },
+    },
+    "Fedora/RHEL (dnf)": {
+        "cmd": "sudo dnf install -y",
+        "tools": {
+            "nmap": "nmap",
+            "whatweb": "whatweb",
+            "rustscan": "rustscan",
+            "arp-scan": "arp-scan",
+            "netdiscover": "netdiscover",
+        },
+    },
+}
 
 
 def check_tool_installed(tool_name: str) -> bool:
@@ -26,7 +59,7 @@ def check_tool_installed(tool_name: str) -> bool:
 
 def check_and_install_tools() -> None:
     """Check required external tools and offer interactive installation if missing."""
-    tools = ["nmap", "whatweb"]
+    tools = ["nmap", "whatweb", "rustscan", "arp-scan", "netdiscover"]
     for tool in tools:
         if check_tool_installed(tool):
             Log.good(f"Tool '{tool}' is installed.")
@@ -53,35 +86,35 @@ def check_and_install_tools() -> None:
             Log.info(f"Skipping installation of '{tool}'.")
             continue
 
+        os_choices = [*list(OS_MAP.keys()), "Cancel"]
         try:
             os_choice = questionary.select(
                 "Select your operating system / package manager:",
-                choices=[
-                    "Ubuntu/Debian (apt)",
-                    "Arch Linux (pacman)",
-                    "Fedora (dnf)",
-                    "Cancel"
-                ]
+                choices=os_choices
             ).ask()
         except (KeyboardInterrupt, Exception):
             print()
             Log.info("OS selection cancelled.")
             continue
 
-        if not os_choice or "Cancel" in os_choice:
+        if not os_choice or os_choice == "Cancel":
             Log.info("Installation cancelled.")
             continue
 
-        cmd = ""
-        if "apt" in os_choice:
-            cmd = f"sudo apt update && sudo apt install -y {tool}"
-        elif "pacman" in os_choice:
-            cmd = f"sudo pacman -S --noconfirm {tool}"
-        elif "dnf" in os_choice:
-            cmd = f"sudo dnf install -y {tool}"
-
-        if not cmd:
+        os_config = OS_MAP.get(os_choice)
+        if not os_config:
             continue
+
+        pkg_name = os_config.get("tools", {}).get(tool)
+        if not pkg_name:
+            Log.bad(f"Tool {tool} is not available via package manager. Please install manually.")
+            continue
+
+        base_cmd = os_config.get("cmd", "")
+        # Remove trailing '-y' or '--noconfirm' so user can answer y/n themselves
+        tokens = base_cmd.split()
+        cleaned_tokens = [t for t in tokens if t not in ("-y", "--noconfirm")]
+        cmd = f"{' '.join(cleaned_tokens)} {pkg_name}"
 
         Log.info(f"Command to execute: {cmd}")
         try:
