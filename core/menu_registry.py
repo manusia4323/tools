@@ -1,24 +1,58 @@
 """Menu registry for extensible shell architecture."""
 
-MENU_STRUCTURE = {
-    "Web Analysis": [
-        {"name": "Recon", "desc": "Analyze single page", "handler": "do_recon"},
-        {"name": "Crawl", "desc": "Map links and forms", "handler": "do_crawl"},
-        {"name": "Web Profiler", "desc": "WAF, Headers, Cookies", "handler": "do_profile"},
-    ],
-    "Network Tools": [
-        {"name": "Nmap", "desc": "Port scanner", "handler": "do_nmap"},
-        {"name": "RustScan", "desc": "Fast port scanner", "handler": "do_rustscan"},
-        {"name": "Arp-Scan", "desc": "Local network discovery", "handler": "do_arpscan"},
-        {"name": "Netdiscover", "desc": "Active/passive ARP recon", "handler": "do_netdiscover"},
-        {"name": "WhatWeb", "desc": "Fingerprinting tech", "handler": "do_whatweb"},
-    ],
-    "Utilities": [
-        {"name": "Target", "desc": "Set global target", "handler": "do_target"},
-        {"name": "Scope", "desc": "Manage whitelist", "handler": "do_scope"},
-        {"name": "Reports", "desc": "View reports", "handler": "do_reports"},
-        {"name": "Sessions", "desc": "Manage cookie sessions", "handler": "do_sessions"},
-        {"name": "Wordlists", "desc": "Manage wordlists", "handler": "do_wordlists"},
-        {"name": "Cookies", "desc": "View stored cookies", "handler": "do_cookies"},
-    ],
+MENU_TREE = {
+    "Web Analysis": {
+        "desc": "Analyze websites (Recon, Crawl, Profiler)",
+        "items": {
+            "Recon": {"handler": "do_recon", "desc": "Single page analyze"},
+            "Crawl": {"handler": "do_crawl", "desc": "Map links and forms"},
+            "Web Profiler": {"handler": "do_profile", "desc": "WAF, Headers, Cookies"},
+        },
+    },
+    "Network Tools": {
+        "desc": "Scan and discover networks",
+        "items": {
+            "Port Scanners": {
+                "desc": "Find open ports",
+                "items": {
+                    "Nmap": {"handler": "do_nmap", "desc": "Port scanner & service detection"},
+                    "RustScan": {"handler": "do_rustscan", "desc": "Fast port scanner"},
+                },
+            },
+            "Discovery": {
+                "desc": "Find local hosts",
+                "items": {
+                    "Arp-Scan": {"handler": "do_arpscan", "desc": "Local network discovery"},
+                    "Netdiscover": {"handler": "do_netdiscover", "desc": "Active/passive ARP recon"},
+                },
+            },
+            "WhatWeb": {"handler": "do_whatweb", "desc": "Web fingerprinting"},
+        },
+    },
+    "OSINT": {
+        "desc": "Open-source intelligence tools",
+        "items": {},
+    },
+    "Cracker": {
+        "desc": "Password & credential testing",
+        "items": {},
+    },
+    "Listener": {
+        "desc": "Network listeners & shells",
+        "items": {},
+    },
+    "Utilities": {
+        "desc": "Target, scope, reports, and sessions",
+        "items": {
+            "Target": {"handler": "do_target", "desc": "Set global target"},
+            "Scope": {"handler": "do_scope", "desc": "Manage whitelist"},
+            "Reports": {"handler": "do_reports", "desc": "View reports"},
+            "Sessions": {"handler": "do_sessions", "desc": "Manage cookie sessions"},
+            "Wordlists": {"handler": "do_wordlists", "desc": "Manage wordlists"},
+            "Cookies": {"handler": "do_cookies", "desc": "View stored cookies"},
+        },
+    },
 }
+
+# Backward compatibility alias
+MENU_STRUCTURE = MENU_TREE

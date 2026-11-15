@@ -92,6 +92,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     crawl.add_argument("--proxy", help="Proxy opsional, misalnya http://127.0.0.1:8080.")
 
+    profile = commands.add_parser("profile", help="Analisis profil keamanan (WAF, headers, cookies).")
+    profile.add_argument("-u", "--url", required=True, help="URL target untuk profil keamanan.")
+    profile.add_argument("--proxy", help="Proxy opsional, misalnya http://127.0.0.1:8080.")
+    profile.add_argument("--no-save", action="store_true", help="Jangan simpan cookie ke disk.")
+
     whatweb = commands.add_parser("whatweb", help="Jalankan WhatWeb fingerprinting.")
     whatweb.add_argument("-u", "--url", required=True, help="URL target untuk whatweb.")
 
@@ -379,6 +384,62 @@ def cmd_crawl(args: argparse.Namespace) -> int:
     return 0
 
 
+def run_profile(args: argparse.Namespace) -> int:
+    """Jalankan Web Profiler untuk memeriksa WAF/CDN, security headers, dan cookie flags."""
+    from modules.web_profiler import profile_web
+
+    result = ScanResult(
+        target=args.url,
+        started_at=datetime.now(timezone.utc).isoformat(),
+    )
+    requester = PirateRequester(proxy=getattr(args, "proxy", None))
+    PirateLogger.info(f"Memeriksa profil keamanan web: {args.url}")
+    try:
+        response = requester.get(args.url)
+    except RequestError as exc:
+        PirateLogger.bad(str(exc))
+        return 1
+
+    findings = profile_web(args.url, response)
+    for finding in findings:
+        result.add(finding)
+
+    if not getattr(args, "no_save", False):
+        try:
+            saved_path = requester.save_cookies(response.url)
+            PirateLogger.good(f"Cookie disimpan ke {saved_path}")
+            requester.save_session_meta(
+                {
+                    "source": "profile",
+                    "findings_count": len(findings),
+                }
+            )
+        except Exception:
+            pass
+
+    result.finished_at = datetime.now(timezone.utc).isoformat()
+    reporter = Reporter(result)
+    PirateLogger.separator()
+    if args.output == "term":
+        reporter.to_terminal()
+    else:
+        host = urlparse(args.url).netloc or "target"
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        extension = "json" if args.output == "json" else "md"
+        output_path = Path(args.out_dir) / f"{host}-{timestamp}.{extension}"
+        if args.output == "json":
+            reporter.to_json(str(output_path))
+        else:
+            reporter.to_markdown(str(output_path))
+        args.report_path = str(output_path)
+    return 0
+
+
+# Aliases for compatibility
+cmd_profile = run_profile
+cmd_profile_main = run_profile
+
+
 def cmd_whatweb(args: argparse.Namespace) -> int:
     if not check_whatweb():
         PirateLogger.bad("WhatWeb is not installed on this system. Please install it to use this feature.")
@@ -412,6 +473,11 @@ def main() -> int:
             if parsed_url.scheme not in ("http", "https") or not parsed_url.hostname:
                 parser.error("URL harus memakai http:// atau https:// dan memiliki host.")
             return cmd_crawl(args)
+        if args.command == "profile":
+            parsed_url = urlparse(args.url)
+            if parsed_url.scheme not in ("http", "https") or not parsed_url.hostname:
+                parser.error("URL harus memakai http:// atau https:// dan memiliki host.")
+            return run_profile(args)
         if args.command == "whatweb":
             parsed_url = urlparse(args.url)
             if parsed_url.scheme not in ("http", "https") or not parsed_url.hostname:
